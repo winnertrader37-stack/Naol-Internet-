@@ -2,232 +2,103 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const state = {
-  selectedServer: "singapore",
-  autoSelect: true,
+  selectedServer: "Singapore",
+  autoSelection: true,
   reconnect: true,
-  dns: "cloudflare",
-  vpnConnected: false
+  dns: "1.1.1.1"
 };
 
-const serverNames = {
-  singapore: "Singapore",
-  germany: "Germany",
-  finland: "Finland"
-};
-
-let toastTimer;
-
-function showToast(message) {
-  const toast = $("#toast");
-  toast.textContent = message;
-  toast.classList.add("visible");
-
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    toast.classList.remove("visible");
-  }, 3200);
-}
-
-function addActivity(level, message) {
-  const log = $("#activityLog");
+function log(message, level = "INFO") {
   const row = document.createElement("p");
   const time = document.createElement("time");
   const text = document.createElement("span");
 
   time.textContent = level;
   text.textContent = message;
-
   row.append(time, text);
-  log.prepend(row);
 
-  // Keep the activity log small.
-  while (log.children.length > 20) {
-    log.lastElementChild.remove();
+  $("#logs").prepend(row);
+
+  while ($("#logs").children.length > 15) {
+    $("#logs").lastElementChild.remove();
   }
 }
 
-function renderServerSelection() {
-  $$(".server-card").forEach((card) => {
-    const isSelected =
-      card.dataset.server === state.selectedServer;
+function selectServer(name) {
+  state.selectedServer = name;
 
-    card.classList.toggle("selected", isSelected);
+  document.querySelectorAll(".server").forEach((button) => {
+    const selected = button.dataset.server === name;
 
-    const indicator = card.querySelector(".server-indicator");
-    indicator.textContent = isSelected ? "✓" : "○";
+    button.classList.toggle("selected", selected);
+    button.querySelector(".check").textContent = selected ? "✓" : "○";
   });
 
-  $("#serverFeedback").textContent =
-    `${serverNames[state.selectedServer]} selected as a candidate. ` +
-    "Live server performance has not been verified.";
-
-  addActivity(
-    "SELECT",
-    `${serverNames[state.selectedServer]} selected as a candidate route.`
-  );
+  log(`${name} selected as a server candidate.`, "SELECT");
+  $("#serverMessage").textContent =
+    `${name} selected. Live VPN server checks are not configured.`;
 }
 
-function selectServer(serverId) {
-  if (!Object.hasOwn(serverNames, serverId)) {
-    showToast("Unknown server candidate.");
-    return;
-  }
+document.querySelectorAll(".server").forEach((button) => {
+  button.addEventListener("click", () => {
+    selectServer(button.dataset.server);
+  });
+});
 
-  if (state.vpnConnected) {
-    showToast("Disconnect the VPN before changing the candidate.");
-    return;
-  }
-
-  state.selectedServer = serverId;
-  renderServerSelection();
-}
-
-function findBestCandidate() {
-  if (state.vpnConnected) {
-    showToast("Disconnect before changing the candidate.");
+$("#autoBtn").addEventListener("click", () => {
+  if (!$("#autoToggle").checked) {
+    $("#serverMessage").textContent =
+      "Enable auto server selection in Smart Controls first.";
     return;
   }
 
   /*
-    This is a deterministic demo choice, not a real measurement.
-    Replace this section with results from a configured API that
-    checks actual VPN gateways and real device-side performance.
+    No real server health API exists in this frontend yet.
+    Do not claim that this demo choice is the fastest server.
   */
-  const candidates = Object.keys(serverNames);
+  $("#serverMessage").textContent =
+    "No live server measurements available. Configure VPN gateways and API first.";
 
-  const chosen = candidates.find(
-    (id) => id === state.selectedServer
-  ) || candidates[0];
+  log("Server selection requires a live health-check API.", "NOTICE");
+});
 
-  state.selectedServer = chosen;
-  renderServerSelection();
+$("#connectBtn").addEventListener("click", () => {
+  $("#status").textContent = "NOT CONNECTED";
+  $("#coreStatus").textContent = "READY";
+  $("#coreText").textContent = "VPN NOT CONNECTED";
+  $("#connectMessage").textContent =
+    "No Android VPN integration or gateway is configured.";
 
-  $("#serverFeedback").textContent =
-    `Demo selection: ${serverNames[chosen]}. ` +
-    "No live health checks or speed measurements were performed.";
-
-  addActivity(
-    "DEMO",
-    "Candidate selection preview completed without live server testing."
+  log(
+    "Connection requested. A website cannot start an Android VPN tunnel by itself.",
+    "NOTICE"
   );
+});
 
-  showToast("Demo only: configure live server checks for real selection.");
-}
+$("#autoToggle").addEventListener("change", (event) => {
+  state.autoSelection = event.target.checked;
+  log(`Auto selection preference: ${state.autoSelection}.`);
+});
 
-function handleConnect() {
-  /*
-    A website cannot create an Android-wide VPN tunnel by itself.
-    Do not display a fake connected state. A real implementation
-    must invoke a separately installed Android VPN app or its
-    supported connection flow, with user permission.
-  */
-  if (state.vpnConnected) {
-    state.vpnConnected = false;
-  }
+$("#reconnectToggle").addEventListener("change", (event) => {
+  state.reconnect = event.target.checked;
+  log(`Reconnect preference: ${state.reconnect}.`);
+});
 
-  $("#connectionLabel").textContent = "READY";
-  $("#corePercent").textContent = "READY";
-  $("#coreCaption").textContent = "AWAITING CONNECTION";
-  $("#connectButtonText").textContent = "SMART CONNECT";
-  $("#buttonNote").textContent =
-    "Demo mode · No VPN tunnel connected";
-
-  addActivity(
-    "INFO",
-    "Connect requested. No VPN gateway is configured; no tunnel was started."
+$("#dns").addEventListener("change", (event) => {
+  state.dns = event.target.value;
+  log(
+    `DNS preference set to ${state.dns}. Android DNS has not been changed.`
   );
+});
 
-  showToast(
-    "VPN not connected. An Android VPN app and a working gateway are required."
-  );
-}
+$("#clearBtn").addEventListener("click", () => {
+  $("#logs").replaceChildren();
+  log("Activity log cleared.");
+});
 
-function updateAutoSelection() {
-  state.autoSelect = $("#autoServerToggle").checked;
-
-  addActivity(
-    "SETTINGS",
-    `Auto candidate selection ${state.autoSelect ? "enabled" : "disabled"}.`
-  );
-
-  showToast(
-    `Auto selection preference ${state.autoSelect ? "enabled" : "disabled"}.`
-  );
-}
-
-function updateReconnectPreference() {
-  state.reconnect = $("#reconnectToggle").checked;
-
-  addActivity(
-    "SETTINGS",
-    `Reconnect preference ${state.reconnect ? "enabled" : "disabled"}.`
-  );
-
-  showToast(
-    "Preference saved for this page session. VPN reconnect is not active."
-  );
-}
-
-function updateDnsPreference() {
-  state.dns = $("#dnsSelect").value;
-
-  const labels = {
-    cloudflare: "Cloudflare DNS",
-    google: "Google DNS",
-    system: "System default DNS"
-  };
-
-  addActivity(
-    "SETTINGS",
-    `${labels[state.dns]} selected as a preference.`
-  );
-
-  showToast(
-    `${labels[state.dns]} selected. Android DNS has not been changed.`
-  );
-}
-
-function clearActivity() {
-  $("#activityLog").replaceChildren();
-
-  addActivity("INFO", "Activity log cleared.");
-}
-
-function initialize() {
-  $$(".server-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      selectServer(card.dataset.server);
-    });
-  });
-
-  $("#connectButton").addEventListener("click", handleConnect);
-  $("#autoSelectButton").addEventListener("click", findBestCandidate);
-
-  $("#autoServerToggle").addEventListener(
-    "change",
-    updateAutoSelection
-  );
-
-  $("#reconnectToggle").addEventListener(
-    "change",
-    updateReconnectPreference
-  );
-
-  $("#dnsSelect").addEventListener(
-    "change",
-    updateDnsPreference
-  );
-
-  $("#clearLogButton").addEventListener("click", clearActivity);
-
-  $("#systemStatus").textContent = "SYSTEM READY";
-
-  addActivity("READY", "Network dashboard initialized.");
-  addActivity("INFO", "Live server API is not configured.");
-  addActivity("INFO", "Android VPN integration is not configured.");
-}
-
-document.addEventListener("DOMContentLoaded", initialize);
+log("Dashboard initialized.");
+log("Live VPN gateway is not configured.");
+log("No live speed data is being reported.");
